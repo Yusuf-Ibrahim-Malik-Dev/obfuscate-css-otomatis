@@ -1,0 +1,246 @@
+    <script>
+        /**
+         * ========================================================
+         * CSS OBFUSCATOR OTOMATIS
+         * CUSTOM PREFIX: root_
+         * CUSTOM SUFFIX: _master
+         * ========================================================
+         * 
+         * Cara kerja:
+         * 1. Scan semua elemen di HTML → kumpulkan semua nama kelas
+         * 2. Scan semua CSS → kumpulkan semua selector kelas
+         * 3. Gabungkan → buat mapping unik
+         * 4. Ganti semua nama kelas di HTML dan CSS dengan:
+         *    root_[random]_master
+         * ========================================================
+         */
+
+        (function() {
+            'use strict';
+
+            // ======================================================
+            // 🎯 CUSTOM PREFIX & SUFFIX
+            // ======================================================
+            const PREFIX = 'root_';
+            const SUFFIX = '_master';
+
+            console.log('🔐 [Obfuscator] Memulai proses obfuskasi otomatis...');
+            console.log(`📌 Format: ${PREFIX}[random]${SUFFIX}`);
+
+            // ------------------------------------------------------
+            // STEP 1: KUMPULKAN SEMUA NAMA KELAS DARI HTML
+            // ------------------------------------------------------
+            function getAllClassNamesFromDOM() {
+                const classSet = new Set();
+                const allElements = document.querySelectorAll('*');
+                
+                allElements.forEach(el => {
+                    if (el.classList) {
+                        el.classList.forEach(cls => {
+                            // Filter kelas yang sudah di-obfuskasi (berawalan root_)
+                            if (!cls.startsWith(PREFIX)) {
+                                classSet.add(cls);
+                            }
+                        });
+                    }
+                });
+                
+                return classSet;
+            }
+
+            // ------------------------------------------------------
+            // STEP 2: KUMPULKAN SEMUA NAMA KELAS DARI CSS
+            // ------------------------------------------------------
+            function getAllClassNamesFromCSS() {
+                const classSet = new Set();
+                const styleSheets = document.styleSheets;
+                
+                for (let i = 0; i < styleSheets.length; i++) {
+                    try {
+                        const sheet = styleSheets[i];
+                        const rules = sheet.cssRules || sheet.rules;
+                        if (!rules) continue;
+                        
+                        for (let j = 0; j < rules.length; j++) {
+                            const rule = rules[j];
+                            if (rule.selectorText) {
+                                // Cari semua .nama-kelas di selector
+                                const matches = rule.selectorText.match(/\.([a-zA-Z_][a-zA-Z0-9_-]*)/g);
+                                if (matches) {
+                                    matches.forEach(match => {
+                                        const className = match.substring(1); // hilangkan titik
+                                        if (!className.startsWith(PREFIX)) {
+                                            classSet.add(className);
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        // Skip jika ada CORS error
+                    }
+                }
+                
+                return classSet;
+            }
+
+            // ------------------------------------------------------
+            // STEP 3: GABUNGKAN DAN BUAT MAPPING
+            // ------------------------------------------------------
+            function createMapping(domClasses, cssClasses) {
+                // Gabungkan semua kelas unik
+                const allClasses = new Set([...domClasses, ...cssClasses]);
+                const mapping = {};
+                
+                // Buat nama acak untuk setiap kelas dengan format: root_[random]_master
+                allClasses.forEach(cls => {
+                    const random = Math.random().toString(36).substring(2, 7);
+                    mapping[cls] = PREFIX + random + SUFFIX;
+                });
+                
+                return mapping;
+            }
+
+            // ------------------------------------------------------
+            // STEP 4: OBFUSKASI DOM ELEMEN
+            // ------------------------------------------------------
+            function obfuscateDOM(mapping) {
+                const allElements = document.querySelectorAll('*');
+                let count = 0;
+                
+                allElements.forEach(el => {
+                    if (el.classList) {
+                        const classesToAdd = [];
+                        const classesToRemove = [];
+                        
+                        el.classList.forEach(cls => {
+                            if (mapping[cls]) {
+                                classesToRemove.push(cls);
+                                classesToAdd.push(mapping[cls]);
+                            }
+                        });
+                        
+                        classesToRemove.forEach(cls => el.classList.remove(cls));
+                        classesToAdd.forEach(cls => el.classList.add(cls));
+                        
+                        if (classesToAdd.length > 0) count++;
+                    }
+                });
+                
+                return count;
+            }
+
+            // ------------------------------------------------------
+            // STEP 5: OBFUSKASI CSS
+            // ------------------------------------------------------
+            function obfuscateCSS(mapping) {
+                const styleSheets = document.styleSheets;
+                let totalRules = 0;
+                
+                for (let i = 0; i < styleSheets.length; i++) {
+                    try {
+                        const sheet = styleSheets[i];
+                        if (!sheet.href || sheet.href.startsWith(window.location.origin) || sheet.href === '') {
+                            const rules = sheet.cssRules || sheet.rules;
+                            if (!rules) continue;
+                            
+                            // Kumpulkan aturan yang akan diubah (dari belakang ke depan)
+                            const rulesToUpdate = [];
+                            for (let j = rules.length - 1; j >= 0; j--) {
+                                const rule = rules[j];
+                                if (rule.selectorText) {
+                                    let newSelector = rule.selectorText;
+                                    let hasChanges = false;
+                                    
+                                    // Ganti setiap kelas yang ada di mapping
+                                    Object.keys(mapping).forEach(originalClass => {
+                                        const regex = new RegExp('\\.' + originalClass + '\\b', 'g');
+                                        if (regex.test(newSelector)) {
+                                            newSelector = newSelector.replace(regex, '.' + mapping[originalClass]);
+                                            hasChanges = true;
+                                        }
+                                    });
+                                    
+                                    if (hasChanges) {
+                                        rulesToUpdate.push({
+                                            index: j,
+                                            newSelector: newSelector,
+                                            cssText: rule.style.cssText
+                                        });
+                                    }
+                                }
+                            }
+                            
+                            // Update rules
+                            rulesToUpdate.forEach(item => {
+                                try {
+                                    sheet.deleteRule(item.index);
+                                    sheet.insertRule(
+                                        item.newSelector + ' { ' + item.cssText + ' }',
+                                        item.index
+                                    );
+                                    totalRules++;
+                                } catch (e) {
+                                    // Skip jika gagal
+                                }
+                            });
+                        }
+                    } catch (e) {
+                        // Skip jika ada error
+                    }
+                }
+                
+                return totalRules;
+            }
+
+            // ------------------------------------------------------
+            // STEP 6: MAIN PROCESS
+            // ------------------------------------------------------
+            function runObfuscation() {
+                console.log('📋 [Obfuscator] Mengumpulkan nama kelas dari DOM...');
+                const domClasses = getAllClassNamesFromDOM();
+                console.log(`   → Ditemukan ${domClasses.size} kelas di DOM`);
+                
+                console.log('📋 [Obfuscator] Mengumpulkan nama kelas dari CSS...');
+                const cssClasses = getAllClassNamesFromCSS();
+                console.log(`   → Ditemukan ${cssClasses.size} kelas di CSS`);
+                
+                console.log('🔗 [Obfuscator] Membuat mapping...');
+                const mapping = createMapping(domClasses, cssClasses);
+                console.log(`   → Total ${Object.keys(mapping).length} kelas akan di-obfuskasi`);
+                
+                // Tampilkan mapping di console dengan format yang rapi
+                console.log('📊 [Obfuscator] Mapping (root_[random]_master):');
+                console.log('┌────────────────────────┬────────────────────────────┐');
+                console.log('│ Asli                   │ Obfuskasi                  │');
+                console.log('├────────────────────────┼────────────────────────────┤');
+                Object.keys(mapping).forEach(key => {
+                    const paddedKey = key.padEnd(22);
+                    const paddedVal = mapping[key].padEnd(26);
+                    console.log(`│ ${paddedKey}│ ${paddedVal}│`);
+                });
+                console.log('└────────────────────────┴────────────────────────────┘');
+                
+                console.log('🔄 [Obfuscator] Mengganti nama kelas di DOM...');
+                const domCount = obfuscateDOM(mapping);
+                console.log(`   → ${domCount} elemen terobfuskasi`);
+                
+                console.log('🔄 [Obfuscator] Mengganti nama kelas di CSS...');
+                const cssCount = obfuscateCSS(mapping);
+                console.log(`   → ${cssCount} aturan CSS terobfuskasi`);
+                
+                console.log('✅ [Obfuscator] SELESAI!');
+                console.log(`🔒 Sekarang coba Inspect Element (F12) dan lihat semua nama kelas berubah jadi ${PREFIX}[random]${SUFFIX}!`);
+            }
+
+            // ------------------------------------------------------
+            // EKSEKUSI
+            // ------------------------------------------------------
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', runObfuscation);
+            } else {
+                runObfuscation();
+            }
+
+        })();
+    </script>
